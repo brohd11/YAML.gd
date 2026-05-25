@@ -608,3 +608,85 @@ static func _string_safe_split(line: String, delim:String, first_delim:=true) ->
 			parts.append(last_string)
 	
 	return parts
+
+
+# dump section and utils
+static func dump(data, indent: int = 0) -> String:
+	# Handle the very root object being empty
+	if (data is Dictionary or data is Array) and data.is_empty():
+		return "{}" if data is Dictionary else "[]"
+
+	var lines = []
+	var pad = "  ".repeat(indent)
+	
+	if data is Dictionary:
+		for key in data:
+			var safe_key = _scalar(key) # Keys might need quotes too (e.g. if they contain spaces or colons)
+			var val = data[key]
+			
+			if val is Dictionary or val is Array:
+				if val.is_empty():
+					# Inline empty collections
+					lines.append("%s%s: %s" % [pad, safe_key, "{}" if val is Dictionary else "[]"])
+				else:
+					lines.append("%s%s:" % [pad, safe_key])
+					lines.append(dump(val, indent + 1))
+			else:
+				lines.append("%s%s: %s" % [pad, safe_key, _scalar(val)])
+				
+	elif data is Array:
+		for item in data:
+			if item is Dictionary or item is Array:
+				if item.is_empty():
+					lines.append("%s- %s" % [pad, "{}" if item is Dictionary else "[]"])
+				else:
+					# place complex items on a new line to avoid aligning dict keys to dash index
+					lines.append("%s-" % pad)
+					lines.append(dump(item, indent + 1))
+			else:
+				lines.append("%s- %s" % [pad, _scalar(item)])
+	
+	return "\n".join(lines)
+
+static func _scalar(val) -> String:
+	if val == null:
+		return "null"
+	if val is bool:
+		return "true" if val else "false"
+	if val is int or val is float:
+		return str(val)
+		
+	var s = str(val)
+	if s.is_empty():
+		return '""'
+		
+	var needs_quotes = false
+	var lower_s = s.to_lower()
+	
+	# quote strings that parser might mistake for another data type
+	if lower_s in ["true", "false", "null", "yes", "no", "on", "off", "~"]:
+		needs_quotes = true
+	elif s.is_valid_float() or s.is_valid_int(): # Godot built-in string number checks
+		needs_quotes = true
+		
+	# chars that cause syntax errors/ambiguity if unquoted
+	var special_chars = [
+		":", "{", "}", "[", "]", ",", "&", "*", "#", "?", "|", 
+		"-", "<", ">", "=", "!", "%", "@", "`", "\n", "\"", "\\"
+	]
+	if not needs_quotes:
+		for c in special_chars:
+			if c in s:
+				needs_quotes = true
+				break
+	
+	# quote if leading/trailing whitespace
+	if s.begins_with(" ") or s.ends_with(" "):
+		needs_quotes = true
+	
+	# output escaped quoted string
+	if needs_quotes:
+		s = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+		return '"%s"' % s
+		
+	return s
