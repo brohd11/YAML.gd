@@ -10,7 +10,7 @@ func run() -> bool:
 	
 	# Test 1: Simple key-value pairs
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/basic/test_01.yaml",
+		"res://tests/yamls/basic/test_01.yaml",
 		FileAccess.READ)
 	var yaml1 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -32,7 +32,7 @@ func run() -> bool:
 	
 	# Test 2: Nested dictionaries
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/basic/test_02.yaml",
+		"res://tests/yamls/basic/test_02.yaml",
 		FileAccess.READ)
 	var yaml2 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -55,7 +55,7 @@ func run() -> bool:
 	
 	# Test 3: Simple lists
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/basic/test_03.yaml",
+		"res://tests/yamls/basic/test_03.yaml",
 		FileAccess.READ)
 	var yaml3 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -80,7 +80,7 @@ func run() -> bool:
 	
 	# Test 4: Mixed structures
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/basic/test_04.yaml",
+		"res://tests/yamls/basic/test_04.yaml",
 		FileAccess.READ)
 	var yaml4 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -104,7 +104,7 @@ func run() -> bool:
 	
 	# Test 5: Empty values
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/basic/test_05.yaml",
+		"res://tests/yamls/basic/test_05.yaml",
 		FileAccess.READ)
 	var yaml5 = f_tmp.get_as_text()
 	f_tmp.close()

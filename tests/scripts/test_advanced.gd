@@ -10,7 +10,7 @@ func run() -> bool:
 
 	# Test 1: Complex nested structure
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_01.yaml",
+		"res://tests/yamls/advanced/test_01.yaml",
 		FileAccess.READ)
 	var yaml1 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -44,7 +44,7 @@ func run() -> bool:
 
 	# Test 2: Multiple levels of nesting
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_02.yaml",
+		"res://tests/yamls/advanced/test_02.yaml",
 		FileAccess.READ)
 	var yaml2 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -71,7 +71,7 @@ func run() -> bool:
 
 	# Test 3: Mixed list types
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_03.yaml",
+		"res://tests/yamls/advanced/test_03.yaml",
 		FileAccess.READ)
 	var yaml3 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -97,7 +97,7 @@ func run() -> bool:
 
 	# Test 4: Comments and empty lines
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_04.yaml",
+		"res://tests/yamls/advanced/test_04.yaml",
 		FileAccess.READ)
 	var yaml4 = f_tmp.get_as_text()
 	f_tmp.close()
@@ -121,7 +121,7 @@ func run() -> bool:
 
 	# Test 5: Colons in values
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_05.yaml",
+		"res://tests/yamls/advanced/test_05.yaml",
 		FileAccess.READ)
 	var yaml5 = f_tmp.get_as_text()
 	f_tmp.close()
