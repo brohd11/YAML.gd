@@ -1,0 +1,175 @@
+@tool
+extends EditorScript
+
+func _run() -> void:
+	var all_passed = true
+	var files_passed = test_files()
+	if !files_passed:
+		all_passed = false
+	
+	print("")
+	print("--- Stress Test ---")
+	var stress_test_passed = stress_test()
+	if !stress_test_passed:
+		all_passed = false
+	
+	print("")
+	if all_passed:
+		print("✅ ALL TESTS PASSED")
+	else:
+		print("❌ SOME TESTS FAILED")
+
+
+static func test_files():
+	var files = [
+		"res://tests/yamls/advanced/test_01.yaml",
+		"res://tests/yamls/advanced/test_02.yaml",
+		"res://tests/yamls/advanced/test_03.yaml",
+		"res://tests/yamls/advanced/test_04.yaml",
+		"res://tests/yamls/advanced/test_05.yaml",
+		"res://tests/yamls/basic/test_01.yaml",
+		"res://tests/yamls/basic/test_02.yaml",
+		"res://tests/yamls/basic/test_03.yaml",
+		"res://tests/yamls/basic/test_04.yaml",
+		"res://tests/yamls/basic/test_05.yaml",
+		"res://tests/yamls/multiline/test_01.yaml",
+		"res://tests/yamls/multiline/test_02.yaml",
+		"res://tests/yamls/multiline/test_03.yaml",
+		"res://tests/yamls/multiline/test_04.yaml",
+		"res://tests/yamls/multiline/test_05.yaml",
+	]
+	var all_passed = true
+	for f in files:
+		var passed = _test_dump_and_read(f)
+		if !passed:
+			all_passed = false
+	
+	return all_passed
+
+static func _test_dump_and_read(file_path:String, save_to_file:bool=false):
+	var text = FileAccess.get_file_as_string(file_path)
+	var parser = YAMLParser.new()
+	var file_data = parser.parse(text)
+	
+	var dumped = YAMLParser.dump(file_data)
+	var reparsed_data = parser.parse(dumped)
+	
+	var passed = file_data == reparsed_data
+	if passed:
+		print("Success: ", file_path)
+	else:
+		print("Fail: ", file_path)
+		print("")
+		print("--- Expected ---")
+		print(file_data)
+		print("")
+		print("--- Parsed ---")
+		print(reparsed_data)
+	
+	if !save_to_file:
+		return passed
+	
+	var new_path = "res://.godot".path_join(file_path.get_base_dir().get_file()).path_join(file_path.get_file())
+	DirAccess.make_dir_recursive_absolute(new_path.get_base_dir())
+	var f = FileAccess.open(new_path, FileAccess.WRITE)
+	f.store_string(dumped)
+	
+	return passed
+
+
+static func stress_test():
+	var stress_test_data = get_yaml_stress_test()
+	var yaml_dump = YAMLParser.dump(stress_test_data)
+	
+	var parser = YAMLParser.new()
+	var yaml_dump_parsed = parser.parse(yaml_dump)
+	
+	var passed = stress_test_data == yaml_dump_parsed
+	print("Stress test dump equal to parsed: ", passed)
+	if !passed:
+		print("")
+		print("--- Expected ---")
+		print(stress_test_data)
+		print("")
+		print("--- Parsed ---")
+		print(yaml_dump_parsed)
+	
+	return passed
+
+static func get_yaml_stress_test() -> Dictionary:
+	return {
+		# Basic Data Types
+		"standard_string": "Hello World",
+		"standard_int": 42,
+		"standard_float": 3.14159,
+		"standard_bool_true": true,
+		"standard_bool_false": false,
+		"standard_null": null,
+
+		# String Coercion Traps (Strings that parsers often mistake for other types)
+		"string_int": "42",
+		"string_float": "3.14159",
+		"string_bool_true": "true",
+		"string_bool_false": "False",
+		"string_null": "null",
+		"string_yes": "yes",
+		"string_no": "no",
+
+		# Special Characters and Whitespace
+		"empty_string": "",
+		"leading_space": "  indented string",
+		"trailing_space": "trailing string  ",
+		"multiline_string": "Line 1\nLine 2\nLine 3",
+		"quotes_inside": 'The user typed "Hello" and \\ or /',
+		"comment_trap": "This string has a # character",
+		"colon_trap": "This: has a colon",
+		"yaml_anchors": "&anchor *alias",
+
+		# Tricky Keys (Keys that need to be quoted)
+		"key:with_colon": "value",
+		" key_with_leading_space": "value",
+		"true": "key is the string 'true'",
+		"123": "key is the string '123'",
+
+		# Empty Structures
+		"empty_dict": {},
+		"empty_array": [],
+
+		# Nested Arrays
+		"simple_array": [1, 2, 3],
+		"mixed_array": [1, "two", 3.0, false, null, "42"],
+		"array_of_arrays": [
+			[1, 2],
+			[],
+			[3, 4]
+		],
+
+		# Nested Dictionaries
+		"deeply_nested_dict": {
+			"level_1": {
+				"level_2": {
+					"level_3": "bottom of the rabbit hole",
+					"sibling_empty": {}
+				}
+			}
+		},
+
+		# Complex Mixing (Arrays of Dicts, Dicts in Arrays)
+		"array_of_dicts": [
+			{ "id": 1, "name": "Alice", "active": true },
+			{},
+			{ "id": 2, "name": "Bob", "active": false }
+		],
+		"dict_with_arrays_of_dicts": {
+			"enemies": [
+				{
+					"type": "goblin",
+					"loot": ["gold", "dagger", "null"]
+				},
+				{
+					"type": "dragon",
+					"loot": []
+				}
+			]
+		}
+	}
