@@ -2,9 +2,9 @@ extends Node
 
 func _ready():
 	# Create test instances
-	var basic_test = load("res://addons/yaml_dot_gd/tests/test_basic.gd").new()
-	var multiline_test = load("res://addons/yaml_dot_gd/tests/test_multiline.gd").new()
-	var advanced_test = load("res://addons/yaml_dot_gd/tests/test_advanced.gd").new()
+	var basic_test = load("res://tests/scripts/test_basic.gd").new()
+	var multiline_test = load("res://tests/scripts/test_multiline.gd").new()
+	var advanced_test = load("res://tests/scripts/test_advanced.gd").new()
 	
 	# Run tests
 	var all_passed = true
