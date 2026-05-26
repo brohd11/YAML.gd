@@ -142,7 +142,7 @@ func run() -> bool:
 	
 	# Test 6: Inline comments and tricky strings
 	f_tmp = FileAccess.open(
-		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_06.yaml",
+		"res://tests/yamls/advanced/test_06.yaml",
 		FileAccess.READ)
 	var yaml6 = f_tmp.get_as_text()
 	f_tmp.close()

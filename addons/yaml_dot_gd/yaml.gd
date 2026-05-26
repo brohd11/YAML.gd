@@ -609,7 +609,6 @@ static func _string_safe_split(line: String, delim:String, first_delim:=true) ->
 	
 	return parts
 
-
 # dump section and utils
 static func dump(data, indent: int = 0) -> String:
 	# Handle the very root object being empty
