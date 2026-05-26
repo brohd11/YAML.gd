@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.6"
+      # If you pin a pre-release, change "stable" to match (e.g. "rc1").
+      GODOT_RELEASE: "stable"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Godot binary
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          # What to save/restore: the extracted, executable binary.
+          path: godot
+          # The key. Changing GODOT_VERSION/RELEASE busts the cache automatically.
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux
+
+      - name: Download Godot headless
+        # Only runs on a cache MISS. On a hit, the binary is already restored.
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          BASE="https://github.com/godotengine/godot/releases/download"
+          FILE="Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_linux.x86_64"
+          ZIP="${FILE}.zip"
+          curl -fsSL -o godot.zip \
+            "${BASE}/${GODOT_VERSION}-${GODOT_RELEASE}/${ZIP}"
+          unzip -q godot.zip
+          mv "${FILE}" godot
+          chmod +x godot
+
+      - name: Verify Godot
+        # Runs every time (hit or miss) so we confirm the binary is usable.
+        run: ./godot --version
+
+      - name: Import project
+        run: |
+          timeout 120 ./godot --headless --import . || true
+
+      - name: Run tests
+        run: |
+          ./godot --headless --script res://tests/ci_test.gd
