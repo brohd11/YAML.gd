@@ -2,22 +2,21 @@
 extends EditorScript
 
 func _run() -> void:
+	run()
+
+static func run() -> bool:
 	var all_passed = true
 	var files_passed = test_files()
 	if !files_passed:
 		all_passed = false
 	
 	print("")
-	print("--- Stress Test ---")
+	print("--- Round Trip Stress Test ---")
 	var stress_test_passed = stress_test()
 	if !stress_test_passed:
 		all_passed = false
 	
-	print("")
-	if all_passed:
-		print("✅ ALL TESTS PASSED")
-	else:
-		print("❌ SOME TESTS FAILED")
+	return all_passed
 
 
 static func test_files():
@@ -27,6 +26,7 @@ static func test_files():
 		"res://tests/yamls/advanced/test_03.yaml",
 		"res://tests/yamls/advanced/test_04.yaml",
 		"res://tests/yamls/advanced/test_05.yaml",
+		"res://tests/yamls/advanced/test_06.yaml",
 		"res://tests/yamls/basic/test_01.yaml",
 		"res://tests/yamls/basic/test_02.yaml",
 		"res://tests/yamls/basic/test_03.yaml",
@@ -41,12 +41,15 @@ static func test_files():
 	var all_passed = true
 	for f in files:
 		var passed = _test_dump_and_read(f)
-		if !passed:
+		if not passed:
 			all_passed = false
 	
 	return all_passed
 
-static func _test_dump_and_read(file_path:String, save_to_file:bool=false):
+static func _test_dump_and_read(file_path:String, save_to_file:bool=false) -> bool:
+	if not FileAccess.file_exists(file_path):
+		return false
+	
 	var text = FileAccess.get_file_as_string(file_path)
 	var parser = YAMLParser.new()
 	var file_data = parser.parse(text)
@@ -56,9 +59,9 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false):
 	
 	var passed = file_data == reparsed_data
 	if passed:
-		print("Success: ", file_path)
+		print("PASSED: ", file_path)
 	else:
-		print("Fail: ", file_path)
+		print("FAILED: ", file_path)
 		print("")
 		print("--- Expected ---")
 		print(file_data)
@@ -66,7 +69,7 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false):
 		print("--- Parsed ---")
 		print(reparsed_data)
 	
-	if !save_to_file:
+	if not save_to_file:
 		return passed
 	
 	var new_path = "res://.godot".path_join(file_path.get_base_dir().get_file()).path_join(file_path.get_file())
@@ -77,7 +80,7 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false):
 	return passed
 
 
-static func stress_test():
+static func stress_test() -> bool:
 	var stress_test_data = get_yaml_stress_test()
 	var yaml_dump = YAMLParser.dump(stress_test_data)
 	
@@ -85,8 +88,10 @@ static func stress_test():
 	var yaml_dump_parsed = parser.parse(yaml_dump)
 	
 	var passed = stress_test_data == yaml_dump_parsed
-	print("Stress test dump equal to parsed: ", passed)
-	if !passed:
+	if passed:
+		print("PASSED")
+	else:
+		print("FAILED")
 		print("")
 		print("--- Expected ---")
 		print(stress_test_data)

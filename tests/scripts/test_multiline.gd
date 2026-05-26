@@ -1,7 +1,6 @@
-extends Node
 
 # Test multiline YAML parsing
-func run() -> bool:
+static func run() -> bool:
 	var parser = YAMLParser.new()
 	var test_count = 0
 	var success_count = 0

@@ -1,8 +1,6 @@
-extends Node
-class_name TestAdvanced
 
 # Test advanced YAML features
-func run() -> bool:
+static func run() -> bool:
 	var parser = YAMLParser.new()
 	var test_count = 0
 	var success_count = 0
