@@ -6,6 +6,7 @@ func _ready():
 	var multiline_test = load("res://addons/yaml_dot_gd/tests/test_multiline.gd").new()
 	var advanced_test = load("res://addons/yaml_dot_gd/tests/test_advanced.gd").new()
 	
+	var dump_test = load("res://addons/yaml_dot_gd/tests/dump/dump_test.gd")
 	# Run tests
 	var all_passed = true
 	
@@ -21,6 +22,11 @@ func _ready():
 	
 	print("=== Running Advanced Tests ===")
 	if !advanced_test.run():
+		all_passed = false
+	print("\n")
+	
+	print("=== Running Dump Tests ===")
+	if !dump_test.run():
 		all_passed = false
 	print("\n")
 	
