@@ -139,6 +139,29 @@ func run() -> bool:
 		print("Test 5: FAILED")
 		print("Expected: ", expected5)
 		print("Got: ", result5)
-
+	
+	# Test 6: Inline comments and tricky strings
+	f_tmp = FileAccess.open(
+		"res://addons/yaml_dot_gd/tests/yamls/advanced/test_06.yaml",
+		FileAccess.READ)
+	var yaml6 = f_tmp.get_as_text()
+	f_tmp.close()
+	
+	var expected6 = {
+		"tricky_string": "un ': \"terminated",
+		"valid#:key": "aweird#string",
+		"not_comment": " #string",
+		"multi": "This is a multiline string.\n# This is NOT a comment."
+	}
+	test_count += 1
+	var result6 = parser.parse(yaml6)
+	if typeof(result6) == TYPE_DICTIONARY and result6 == expected6:
+		success_count += 1
+		print("Test 6: PASSED - Inline Comments and tricky strings")
+	else:
+		print("Test 6: FAILED")
+		print("Expected: ", expected6)
+		print("Got: ", result6)
+	
 	print("Advanced Tests: %d/%d passed" % [success_count, test_count])
 	return success_count == test_count

@@ -131,6 +131,11 @@ func parse(yaml_content: String) -> Variant:
 		var indent = _get_indent_level(line_str)
 		var content_str = line_str.substr(indent)
 		
+		if content_str.contains(" #"):
+			var comment_check = _string_safe_split(content_str, " #")
+			if not comment_check.is_empty():
+				content_str = comment_check[0]
+		
 		# Handle decreased indentation (pop stack)
 		if indent < last_indent:
 			# Pop stack until matching indent level
@@ -214,9 +219,10 @@ func parse(yaml_content: String) -> Variant:
 					stack.append([indent, current, current_type, current_key])
 			# Dictionary in list (has colon)
 			else:
-				# Dictionary in list
+				# quoted keys unquoted to standard string
+				var string_safe_key = _unquote_key(parts[0])
 				var new_dict = {}
-				new_dict[parts[0]] = _parse_value(parts[1])
+				new_dict[string_safe_key] = _parse_value(parts[1])
 				
 				if current_type == NODE_LIST:
 					current.append(new_dict)
@@ -225,7 +231,7 @@ func parse(yaml_content: String) -> Variant:
 					# Switch to the new dictionary
 					current = new_dict
 					current_type = NODE_DICT
-					current_key = parts[0]
+					current_key = string_safe_key
 				else:
 					# Create a new list for the dictionary
 					var new_list = [new_dict]
@@ -243,18 +249,18 @@ func parse(yaml_content: String) -> Variant:
 					stack.append([indent, current, current_type, current_key])
 					
 					# Now push the dictionary for children
-					stack.append([indent, new_dict, NODE_DICT, parts[0]])
+					stack.append([indent, new_dict, NODE_DICT, string_safe_key])
 					current = new_dict
 					current_type = NODE_DICT
-					current_key = parts[0]
+					current_key = string_safe_key
 				
 		# Process key-value pairs
 		else:
 			var parts = _split_key_value(content_str)
-			var key = parts[0]
+			var string_safe_key = _unquote_key(parts[0])
 			var value_str = parts[1]
 			
-			current_key = key  # Store current key for reference
+			current_key = string_safe_key  # Store current key for reference
 			
 			if value_str == null:
 				# Look ahead: is next line more indented? If so, create dict, else assign null
@@ -276,23 +282,23 @@ func parse(yaml_content: String) -> Variant:
 				if is_child:
 					var new_dict = {}
 					if current_type == NODE_DICT:
-						current[key] = new_dict
+						current[string_safe_key] = new_dict
 						stack.append([indent, current, current_type, current_key])
 						current = new_dict
 						current_type = NODE_DICT
-						current_key = key
+						current_key = string_safe_key
 					else:
-						var dict_in_list = {key: new_dict}
+						var dict_in_list = {string_safe_key: new_dict}
 						current.append(dict_in_list)
 						stack.append([indent, current, current_type, current_key])
 						current = new_dict
 						current_type = NODE_DICT
-						current_key = key
+						current_key = string_safe_key
 				else:
 					if current_type == NODE_DICT:
-						current[key] = null
+						current[string_safe_key] = null
 					else:
-						var new_dict = {key: null}
+						var new_dict = {string_safe_key: null}
 						current.append(new_dict)
 			else:
 				# Handle special value types
@@ -300,7 +306,7 @@ func parse(yaml_content: String) -> Variant:
 					# Configure multiline state
 					in_multiline = ML_LITERAL if value_str.begins_with("|") else ML_FOLDED
 					multiline_indent = indent
-					multiline_key = key
+					multiline_key = string_safe_key
 					multiline_content = []
 					
 					# Determine chomping behavior
@@ -315,7 +321,7 @@ func parse(yaml_content: String) -> Variant:
 					in_quotes = true
 					quote_char = value_str[0]
 					in_multiline = ML_DOUBLE_QUOTE if quote_char == '"' else ML_SINGLE_QUOTE
-					multiline_key = key
+					multiline_key = string_safe_key
 					multiline_content = []
 					
 					# Parse the quoted string (without trailing newline)
@@ -326,7 +332,7 @@ func parse(yaml_content: String) -> Variant:
 					if value_str.ends_with(quote_char) && !value_str.ends_with("\\" + quote_char):
 						in_quotes = false
 						if current_type == NODE_DICT:
-							current[key] = quoted_value
+							current[string_safe_key] = quoted_value
 						else:
 							current.append(quoted_value)
 						in_multiline = ML_NONE
@@ -336,7 +342,7 @@ func parse(yaml_content: String) -> Variant:
 					var value = _parse_value(value_str)
 					
 					if current_type == NODE_DICT:
-						current[key] = value
+						current[string_safe_key] = value
 					else:
 						current.append(value)
 		
@@ -380,7 +386,7 @@ func _process_multiline_content(content: Array, style: int, chomping: String) ->
 	for line in content:
 		if line.strip_edges().is_empty():
 			continue
-		var line_indent = _count_leading_whitespace(line)
+		var line_indent = _get_indent_level(line)
 		if not has_non_empty or line_indent < min_indent:
 			min_indent = line_indent
 			has_non_empty = true
@@ -440,55 +446,16 @@ func _process_multiline_content(content: Array, style: int, chomping: String) ->
 	
 	return full_content
 
-# Count leading whitespace characters (only spaces)
-static func _count_leading_whitespace(line: String) -> int:
-	var count = 0
-	for c in line:
-		if c == ' ':
-			count += 1
-		else:
-			break
-	return count
 
 # Split key-value pair, handling colons inside quotes
 static func _split_key_value(line: String) -> Array:
-	var in_quotes = false
-	var escape = false
-	var colon_pos = -1
-	
-	# Find first unquoted colon
-	for i in range(line.length()):
-		var c = line[i]
-		
-		if escape:
-			escape = false
-			continue
-			
-		if c == '\\':
-			escape = true
-			continue
-			
-		if c == '"' or c == "'":
-			in_quotes = !in_quotes
-			continue
-			
-		if !in_quotes and c == ':':
-			colon_pos = i
-			break
-	
-	# No colon found - return as key with null value
-	if colon_pos == -1:
-		return [line.strip_edges(), null]
-	
-	# Split key and value
-	var key = line.substr(0, colon_pos).strip_edges()
-	var value = line.substr(colon_pos + 1).strip_edges()
-	
-	# Handle empty values
-	if value.is_empty():
-		value = null
-	
-	return [key, value]
+	# dict keys must be followed by a space if followed by value
+	var split = _string_safe_split(line, ": ")
+	if split.is_empty():
+		return [line.strip_edges().trim_suffix(":"), null]
+	if split[1].is_empty():
+		split[1] = null
+	return split
 
 # Convert string to appropriate data type
 static func _parse_value(s: String) -> Variant:
@@ -498,12 +465,29 @@ static func _parse_value(s: String) -> Variant:
 	if s.is_valid_int(): return s.to_int()
 	if s.is_valid_float(): return s.to_float()
 	
+	
 	# Handle inline arrays
 	if s.begins_with("[") and s.ends_with("]"):
-		var items = s.substr(1, s.length() - 2).split(",", false)
+		var items = _string_safe_split(s.substr(1, s.length() - 2), ",", false)
 		var result = []
 		for item in items:
-			result.append(_parse_value(item.strip_edges()))
+			result.append(_parse_value(item))
+		return result
+	
+	# Check for empty inline dict
+	if s.begins_with("{") and s.ends_with("}"):
+		var items = _string_safe_split(s.substr(1, s.length() - 2), ",", false)
+		var result = {}
+		for item in items:
+			var split = _string_safe_split(item, ":")
+			if split.is_empty():
+				# this is not a valid entry, maybe a parse error here?
+				result[item] = null
+				continue
+			var key = _parse_value(split[0])
+			var val = split[1]
+			var parsed_val = null if val.is_empty() else _parse_value(val)
+			result[key] = parsed_val
 		return result
 	
 	# Handle quoted strings
@@ -547,6 +531,12 @@ static func _parse_quoted_string(s: String) -> String:
 	
 	return result
 
+# Safely strip quotes only when we know it's a dictionary key
+static func _unquote_key(k: String) -> String:
+	if (k.begins_with('"') and k.ends_with('"')) or (k.begins_with("'") and k.ends_with("'")):
+		return _parse_quoted_string(k)
+	return k
+
 # Calculate indent level (only spaces)
 static func _get_indent_level(line: String) -> int:
 	var indent = 0
@@ -556,3 +546,65 @@ static func _get_indent_level(line: String) -> int:
 		else:
 			break
 	return indent
+
+# Split by delim respecting strings
+static func _string_safe_split(line: String, delim:String, first_delim:=true) -> Array:
+	var in_quotes = false
+	var escape = false
+	
+	var simple_delim = delim.length() == 1
+	var delim_check_char = delim[0]
+	
+	var last_delim_index = 0
+	var current_delim_index = -1
+	
+	var quote_char = ""
+	var parts = []
+	# Find unquoted delims
+	for i in range(line.length()):
+		var c = line[i]
+		if escape:
+			escape = false
+			continue
+		if c == '\\':
+			escape = true
+			continue
+		if c == '"' or c == "'":
+			if in_quotes and c == quote_char:
+				in_quotes = false
+				quote_char = ""
+			elif not in_quotes:
+				in_quotes = true
+				quote_char = c
+			continue
+		
+		if not in_quotes and c == delim_check_char:
+			if not simple_delim:
+				var valid_delim = true
+				for j in delim.length():
+					if not i + j < line.length() or line[i + j] != delim[j]:
+						valid_delim = false
+						break
+				if not valid_delim:
+					continue
+				
+			if first_delim:
+				return [line.substr(0, i).strip_edges(), line.substr(i + delim.length()).strip_edges()]
+			
+			current_delim_index = i
+			var delim_string = line.substr(last_delim_index, current_delim_index - last_delim_index).strip_edges()
+			if not delim_string.is_empty():
+				parts.append(delim_string)
+			last_delim_index = current_delim_index + delim.length()
+			continue
+	
+	# No delim found - return empty
+	if current_delim_index == -1:
+		return []
+	else:
+		# add the last part
+		var last_string = line.substr(current_delim_index + delim.length()).strip_edges()
+		if not last_string.is_empty():
+			parts.append(last_string)
+	
+	return parts
