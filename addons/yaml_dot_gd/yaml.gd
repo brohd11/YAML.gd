@@ -518,7 +518,7 @@ static func _split_top_level(s: String, delim: String) -> Array:
 
 
 # ---------------------------------------------------------------------------
-# Dump (unchanged behaviour from the original; kept for round-tripping).
+# Dump
 # ---------------------------------------------------------------------------
 static func dump(data, indent: int = 0) -> String:
 	if (data is Dictionary or data is Array) and data.is_empty():
