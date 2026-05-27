@@ -1,3 +1,14 @@
+## Modified Fork
+This fork is modified with a different parsing function and dump to string function.
+
+Changes sent upstream if accepted.
+
+Known Limitations:
+ - Multiline JSON flow not supported
+
+Original README
+---
+
 ![logo](logo.jpg)
 
 # YAML.gd 1.0.0 ![Godot v4.x](https://img.shields.io/badge/Godot-v4.x-%23478cbf) ![Godot v3.x](https://img.shields.io/badge/Godot-v3.x-%23478cbf)
