@@ -1,6 +1,7 @@
 
 # Test advanced YAML features
-static func run() -> bool:
+static func run() -> Dictionary:
+	var out: Array[String] = []
 	var test_count = 0
 	var success_count = 0
 	var f_tmp
@@ -33,11 +34,11 @@ static func run() -> bool:
 	var result1 = YAMLParser.parse(yaml1)
 	if result1 == expected1:
 		success_count += 1
-		print("Test 1: PASSED - Complex nested structure")
+		out.append("Test 1: PASSED - Complex nested structure")
 	else:
-		print("Test 1: FAILED")
-		print("Expected: ", expected1)
-		print("Got: ", result1)
+		out.append("Test 1: FAILED")
+		out.append(str("Expected: ", expected1))
+		out.append(str("Got: ", result1))
 
 	# Test 2: Multiple levels of nesting
 	f_tmp = FileAccess.open(
@@ -60,11 +61,11 @@ static func run() -> bool:
 	var result2 = YAMLParser.parse(yaml2)
 	if result2 == expected2:
 		success_count += 1
-		print("Test 2: PASSED - Multiple levels of nesting")
+		out.append("Test 2: PASSED - Multiple levels of nesting")
 	else:
-		print("Test 2: FAILED")
-		print("Expected: ", expected2)
-		print("Got: ", result2)
+		out.append("Test 2: FAILED")
+		out.append(str("Expected: ", expected2))
+		out.append(str("Got: ", result2))
 
 	# Test 3: Mixed list types
 	f_tmp = FileAccess.open(
@@ -86,11 +87,11 @@ static func run() -> bool:
 	var result3 = YAMLParser.parse(yaml3)
 	if result3 == expected3:
 		success_count += 1
-		print("Test 3: PASSED - Mixed list types")
+		out.append("Test 3: PASSED - Mixed list types")
 	else:
-		print("Test 3: FAILED")
-		print("Expected: ", expected3)
-		print("Got: ", result3)
+		out.append("Test 3: FAILED")
+		out.append(str("Expected: ", expected3))
+		out.append(str("Got: ", result3))
 
 	# Test 4: Comments and empty lines
 	f_tmp = FileAccess.open(
@@ -110,11 +111,11 @@ static func run() -> bool:
 	var result4 = YAMLParser.parse(yaml4)
 	if result4 == expected4:
 		success_count += 1
-		print("Test 4: PASSED - Comments and empty lines")
+		out.append("Test 4: PASSED - Comments and empty lines")
 	else:
-		print("Test 4: FAILED")
-		print("Expected: ", expected4)
-		print("Got: ", result4)
+		out.append("Test 4: FAILED")
+		out.append(str("Expected: ", expected4))
+		out.append(str("Got: ", result4))
 
 	# Test 5: Colons in values
 	f_tmp = FileAccess.open(
@@ -131,11 +132,11 @@ static func run() -> bool:
 	var result5 = YAMLParser.parse(yaml5)
 	if result5 == expected5:
 		success_count += 1
-		print("Test 5: PASSED")
+		out.append("Test 5: PASSED")
 	else:
-		print("Test 5: FAILED")
-		print("Expected: ", expected5)
-		print("Got: ", result5)
+		out.append("Test 5: FAILED")
+		out.append(str("Expected: ", expected5))
+		out.append(str("Got: ", result5))
 	
 	# Test 6: Inline comments and tricky strings
 	f_tmp = FileAccess.open(
@@ -154,11 +155,11 @@ static func run() -> bool:
 	var result6 = YAMLParser.parse(yaml6)
 	if typeof(result6) == TYPE_DICTIONARY and result6 == expected6:
 		success_count += 1
-		print("Test 6: PASSED - Inline Comments and tricky strings")
+		out.append("Test 6: PASSED - Inline Comments and tricky strings")
 	else:
-		print("Test 6: FAILED")
-		print("Expected: ", expected6)
-		print("Got: ", result6)
+		out.append("Test 6: FAILED")
+		out.append(str("Expected: ", expected6))
+		out.append(str("Got: ", result6))
 	
-	print("Advanced Tests: %d/%d passed" % [success_count, test_count])
-	return success_count == test_count
+	out.append("Advanced Tests: %d/%d passed" % [success_count, test_count])
+	return {"success": success_count == test_count, "output": out}

@@ -42,6 +42,6 @@ func _expect(what: String, got, expected) -> void:
 			pass_state = 0
 		return
 	pass_state = 1
-	print("   %s" % what)
-	print("   got: ", got)
-	print("   exp: ", expected)
+	_log("   %s" % what)
+	_log(str("   got: ", got))
+	_log(str("   exp: ", expected))

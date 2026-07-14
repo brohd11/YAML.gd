@@ -1,7 +1,7 @@
 @tool
 extends EditorScript
 
-var all_tests = load("res://tests/all_tests.gd")
+const TestRun = preload("res://tests/test_run.gd")
 
 func _run() -> void:
-	all_tests.run()
+	print("\n".join(TestRun.run_tests()["output"]))

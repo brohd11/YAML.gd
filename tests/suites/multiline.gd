@@ -1,6 +1,7 @@
 
 # Test multiline YAML parsing
-static func run() -> bool:
+static func run() -> Dictionary:
+	var out: Array[String] = []
 	var test_count = 0
 	var success_count = 0
 	var f_tmp
@@ -19,11 +20,11 @@ static func run() -> bool:
 	var result1 = YAMLParser.parse(yaml1)
 	if result1 == expected1:
 		success_count += 1
-		print("Test 1: PASSED - Literal block")
+		out.append("Test 1: PASSED - Literal block")
 	else:
-		print("Test 1: FAILED")
-		print("Expected: ", expected1)
-		print("Got: ", result1)
+		out.append("Test 1: FAILED")
+		out.append(str("Expected: ", expected1))
+		out.append(str("Got: ", result1))
 	
 	# Test 2: Folded block
 	f_tmp = FileAccess.open(
@@ -39,11 +40,11 @@ static func run() -> bool:
 	var result2 = YAMLParser.parse(yaml2)
 	if result2 == expected2:
 		success_count += 1
-		print("Test 2: PASSED - Folded block")
+		out.append("Test 2: PASSED - Folded block")
 	else:
-		print("Test 2: FAILED")
-		print("Expected: ", expected2)
-		print("Got: ", result2)
+		out.append("Test 2: FAILED")
+		out.append(str("Expected: ", expected2))
+		out.append(str("Got: ", result2))
 		
 	# Test 3: Strip chomping
 	f_tmp = FileAccess.open(
@@ -59,11 +60,11 @@ static func run() -> bool:
 	var result3 = YAMLParser.parse(yaml3)
 	if result3 == expected3:
 		success_count += 1
-		print("Test 3: PASSED - Strip chomping")
+		out.append("Test 3: PASSED - Strip chomping")
 	else:
-		print("Test 3: FAILED")
-		print("Expected: ", expected3)
-		print("Got: ", result3)
+		out.append("Test 3: FAILED")
+		out.append(str("Expected: ", expected3))
+		out.append(str("Got: ", result3))
 	
 	# Test 4: Keep chomping
 	f_tmp = FileAccess.open(
@@ -79,11 +80,11 @@ static func run() -> bool:
 	var result4 = YAMLParser.parse(yaml4)
 	if result4 == expected4:
 		success_count += 1
-		print("Test 4: PASSED - Keep chomping")
+		out.append("Test 4: PASSED - Keep chomping")
 	else:
-		print("Test 4: FAILED")
-		print("Expected: ", expected4)
-		print("Got: ", result4)
+		out.append("Test 4: FAILED")
+		out.append(str("Expected: ", expected4))
+		out.append(str("Got: ", result4))
 	
 	# Test 5: Quoted string
 	f_tmp = FileAccess.open(
@@ -99,11 +100,11 @@ static func run() -> bool:
 	var result5 = YAMLParser.parse(yaml5)
 	if result5 == expected5:
 		success_count += 1
-		print("Test 5: PASSED - Quoted string")
+		out.append("Test 5: PASSED - Quoted string")
 	else:
-		print("Test 5: FAILED")
-		print("Expected: ", expected5)
-		print("Got: ", result5)
+		out.append("Test 5: FAILED")
+		out.append(str("Expected: ", expected5))
+		out.append(str("Got: ", result5))
 	
-	print("Multiline Tests: %d/%d passed" % [success_count, test_count])
-	return success_count == test_count
+	out.append("Multiline Tests: %d/%d passed" % [success_count, test_count])
+	return {"success": success_count == test_count, "output": out}

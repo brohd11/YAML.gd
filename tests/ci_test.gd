@@ -1,8 +1,8 @@
 extends SceneTree
 
-var all_tests = load("res://tests/all_tests.gd")
+const TestRun = preload("res://tests/test_run.gd")
 
 func _init() -> void:
-	var all_passed = all_tests.run()
-	var exit = 0 if all_passed else 1
-	quit(exit)
+	var result = TestRun.run_tests()
+	print("\n".join(result["output"]))
+	quit(0 if result["success"] else 1)

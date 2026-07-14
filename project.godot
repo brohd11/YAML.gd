@@ -14,6 +14,14 @@ config/name="YAML-Dev"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
+[dotnet]
+
+project/assembly_name="YAML-Dev"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/editor_console/plugin.cfg", "res://addons/plugin_exporter/plugin.cfg")
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

@@ -32,8 +32,8 @@ func _expect(got, expected) -> void:
 			pass_state = 0
 		return
 	pass_state = 1
-	print("   got: ", got)
-	print("   exp: ", expected)
+	_log(str("   got: ", got))
+	_log(str("   exp: ", expected))
 
 
 var leading_marker = """---

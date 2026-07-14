@@ -1,0 +1,2 @@
+scripts:
+  - "res://tests/test_run.gd"

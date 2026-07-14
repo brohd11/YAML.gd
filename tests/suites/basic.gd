@@ -1,6 +1,7 @@
 
 # Test basic YAML parsing functionality
-static func run() -> bool:
+static func run() -> Dictionary:
+	var out: Array[String] = []
 	var test_count = 0
 	var success_count = 0
 	var f_tmp
@@ -21,11 +22,11 @@ static func run() -> bool:
 	var result1 = YAMLParser.parse(yaml1)
 	if result1.hash() == expected1.hash():
 		success_count += 1
-		print("Test 1: PASSED - Simple key-value pairs")
+		out.append("Test 1: PASSED - Simple key-value pairs")
 	else:
-		print("Test 1: FAILED")
-		print("Expected: ", expected1)
-		print("Got: ", result1)
+		out.append("Test 1: FAILED")
+		out.append(str("Expected: ", expected1))
+		out.append(str("Got: ", result1))
 	
 	# Test 2: Nested dictionaries
 	f_tmp = FileAccess.open(
@@ -44,11 +45,11 @@ static func run() -> bool:
 	var result2 = YAMLParser.parse(yaml2)
 	if result2.hash() == expected2.hash():
 		success_count += 1
-		print("Test 2: PASSED - Nested dictionaries")
+		out.append("Test 2: PASSED - Nested dictionaries")
 	else:
-		print("Test 2: FAILED")
-		print("Expected: ", expected2)
-		print("Got: ", result2)
+		out.append("Test 2: FAILED")
+		out.append(str("Expected: ", expected2))
+		out.append(str("Got: ", result2))
 	
 	# Test 3: Simple lists
 	f_tmp = FileAccess.open(
@@ -66,14 +67,14 @@ static func run() -> bool:
 		var items = result3["items"]
 		if items.size() == 3 and items[0] == "item1" and items[1] == 42 and items[2] == false:
 			success_count += 1
-			print("Test 3: PASSED - Simple lists")
+			out.append("Test 3: PASSED - Simple lists")
 		else:
-			print("Test 3: FAILED - Incorrect list content")
-			print("Expected: ", expected3["items"])
-			print("Got: ", items)
+			out.append("Test 3: FAILED - Incorrect list content")
+			out.append(str("Expected: ", expected3["items"]))
+			out.append(str("Got: ", items))
 	else:
-		print("Test 3: FAILED - items is not a list")
-		print("Got: ", result3)
+		out.append("Test 3: FAILED - items is not a list")
+		out.append(str("Got: ", result3))
 	
 	# Test 4: Mixed structures
 	f_tmp = FileAccess.open(
@@ -93,11 +94,11 @@ static func run() -> bool:
 	var result4 = YAMLParser.parse(yaml4)
 	if result4.hash() == expected4.hash():
 		success_count += 1
-		print("Test 4: PASSED - Mixed structures")
+		out.append("Test 4: PASSED - Mixed structures")
 	else:
-		print("Test 4: FAILED")
-		print("Expected: ", expected4)
-		print("Got: ", result4)
+		out.append("Test 4: FAILED")
+		out.append(str("Expected: ", expected4))
+		out.append(str("Got: ", result4))
 	
 	# Test 5: Empty values
 	f_tmp = FileAccess.open(
@@ -115,11 +116,11 @@ static func run() -> bool:
 	var result5 = YAMLParser.parse(yaml5)
 	if typeof(result5) == TYPE_DICTIONARY and result5.has("key1") and result5["key1"] == null and result5.has("key2") and result5["key2"] == null and result5.get("key3") == "value":
 		success_count += 1
-		print("Test 5: PASSED - Empty values")
+		out.append("Test 5: PASSED - Empty values")
 	else:
-		print("Test 5: FAILED")
-		print("Expected: ", expected5)
-		print("Got: ", result5)
+		out.append("Test 5: FAILED")
+		out.append(str("Expected: ", expected5))
+		out.append(str("Got: ", result5))
 	
-	print("Basic Tests: %d/%d passed" % [success_count, test_count])
-	return success_count == test_count
+	out.append("Basic Tests: %d/%d passed" % [success_count, test_count])
+	return {"success": success_count == test_count, "output": out}

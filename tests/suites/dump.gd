@@ -2,24 +2,25 @@
 extends EditorScript
 
 func _run() -> void:
-	run()
+	print("\n".join(run()["output"]))
 
-static func run() -> bool:
+static func run() -> Dictionary:
+	var out: Array[String] = []
 	var all_passed = true
-	var files_passed = test_files()
+	var files_passed = test_files(out)
 	if !files_passed:
 		all_passed = false
-	
-	print("")
-	print("--- Round Trip Stress Test ---")
-	var stress_test_passed = stress_test()
+
+	out.append("")
+	out.append("--- Round Trip Stress Test ---")
+	var stress_test_passed = stress_test(out)
 	if !stress_test_passed:
 		all_passed = false
-	
-	return all_passed
+
+	return {"success": all_passed, "output": out}
 
 
-static func test_files():
+static func test_files(out: Array[String]):
 	var files = [
 		"res://tests/yamls/advanced/test_01.yaml",
 		"res://tests/yamls/advanced/test_02.yaml",
@@ -40,13 +41,13 @@ static func test_files():
 	]
 	var all_passed = true
 	for f in files:
-		var passed = _test_dump_and_read(f)
+		var passed = _test_dump_and_read(f, out)
 		if not passed:
 			all_passed = false
-	
+
 	return all_passed
 
-static func _test_dump_and_read(file_path:String, save_to_file:bool=false) -> bool:
+static func _test_dump_and_read(file_path:String, out: Array[String], save_to_file:bool=false) -> bool:
 	if not FileAccess.file_exists(file_path):
 		return false
 	
@@ -58,15 +59,15 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false) -> bo
 	
 	var passed = file_data == reparsed_data
 	if passed:
-		print("PASSED: ", file_path)
+		out.append(str("PASSED: ", file_path))
 	else:
-		print("FAILED: ", file_path)
-		print("")
-		print("--- Expected ---")
-		print(file_data)
-		print("")
-		print("--- Parsed ---")
-		print(reparsed_data)
+		out.append(str("FAILED: ", file_path))
+		out.append("")
+		out.append("--- Expected ---")
+		out.append(str(file_data))
+		out.append("")
+		out.append("--- Parsed ---")
+		out.append(str(reparsed_data))
 	
 	if not save_to_file:
 		return passed
@@ -79,7 +80,7 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false) -> bo
 	return passed
 
 
-static func stress_test() -> bool:
+static func stress_test(out: Array[String]) -> bool:
 	var stress_test_data = get_yaml_stress_test()
 	var yaml_dump = YAMLParser.dump(stress_test_data)
 	
@@ -87,15 +88,15 @@ static func stress_test() -> bool:
 	
 	var passed = stress_test_data == yaml_dump_parsed
 	if passed:
-		print("PASSED")
+		out.append("PASSED")
 	else:
-		print("FAILED")
-		print("")
-		print("--- Expected ---")
-		print(stress_test_data)
-		print("")
-		print("--- Parsed ---")
-		print(yaml_dump_parsed)
+		out.append("FAILED")
+		out.append("")
+		out.append("--- Expected ---")
+		out.append(str(stress_test_data))
+		out.append("")
+		out.append("--- Parsed ---")
+		out.append(str(yaml_dump_parsed))
 	
 	return passed
 
