@@ -14,8 +14,7 @@ func passed():
 	return pass_state == 0
 
 func _check(yaml: String, expected) -> bool:
-	var p = YAMLParser.new()
-	var got = p.parse(yaml)
+	var got = YAMLParser.parse(yaml)
 	#var ok = _eq(got, expected)
 	var ok = got == expected
 	if ok:
@@ -27,7 +26,7 @@ func _check(yaml: String, expected) -> bool:
 		print("   exp: ", expected)
 	
 	var dump = YAMLParser.dump(got)
-	var reparse = p.parse(dump)
+	var reparse = YAMLParser.parse(dump)
 	var reparse_ok = reparse == expected
 	if not reparse_ok:
 		pass_state = 1

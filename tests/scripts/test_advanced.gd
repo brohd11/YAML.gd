@@ -1,7 +1,6 @@
 
 # Test advanced YAML features
 static func run() -> bool:
-	var parser = YAMLParser.new()
 	var test_count = 0
 	var success_count = 0
 	var f_tmp
@@ -31,7 +30,7 @@ static func run() -> bool:
 		}
 	}
 	test_count += 1
-	var result1 = parser.parse(yaml1)
+	var result1 = YAMLParser.parse(yaml1)
 	if result1 == expected1:
 		success_count += 1
 		print("Test 1: PASSED - Complex nested structure")
@@ -58,7 +57,7 @@ static func run() -> bool:
 		}
 	}
 	test_count += 1
-	var result2 = parser.parse(yaml2)
+	var result2 = YAMLParser.parse(yaml2)
 	if result2 == expected2:
 		success_count += 1
 		print("Test 2: PASSED - Multiple levels of nesting")
@@ -84,7 +83,7 @@ static func run() -> bool:
 		]
 	}
 	test_count += 1
-	var result3 = parser.parse(yaml3)
+	var result3 = YAMLParser.parse(yaml3)
 	if result3 == expected3:
 		success_count += 1
 		print("Test 3: PASSED - Mixed list types")
@@ -108,7 +107,7 @@ static func run() -> bool:
 		}
 	}
 	test_count += 1
-	var result4 = parser.parse(yaml4)
+	var result4 = YAMLParser.parse(yaml4)
 	if result4 == expected4:
 		success_count += 1
 		print("Test 4: PASSED - Comments and empty lines")
@@ -129,7 +128,7 @@ static func run() -> bool:
 		"time": "12:30:45"
 	}
 	test_count += 1
-	var result5 = parser.parse(yaml5)
+	var result5 = YAMLParser.parse(yaml5)
 	if result5 == expected5:
 		success_count += 1
 		print("Test 5: PASSED")
@@ -152,7 +151,7 @@ static func run() -> bool:
 		"multi": "This is a multiline string.\n# This is NOT a comment."
 	}
 	test_count += 1
-	var result6 = parser.parse(yaml6)
+	var result6 = YAMLParser.parse(yaml6)
 	if typeof(result6) == TYPE_DICTIONARY and result6 == expected6:
 		success_count += 1
 		print("Test 6: PASSED - Inline Comments and tricky strings")

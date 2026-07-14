@@ -51,11 +51,10 @@ static func _test_dump_and_read(file_path:String, save_to_file:bool=false) -> bo
 		return false
 	
 	var text = FileAccess.get_file_as_string(file_path)
-	var parser = YAMLParser.new()
-	var file_data = parser.parse(text)
+	var file_data = YAMLParser.parse(text)
 	
 	var dumped = YAMLParser.dump(file_data)
-	var reparsed_data = parser.parse(dumped)
+	var reparsed_data = YAMLParser.parse(dumped)
 	
 	var passed = file_data == reparsed_data
 	if passed:
@@ -84,8 +83,7 @@ static func stress_test() -> bool:
 	var stress_test_data = get_yaml_stress_test()
 	var yaml_dump = YAMLParser.dump(stress_test_data)
 	
-	var parser = YAMLParser.new()
-	var yaml_dump_parsed = parser.parse(yaml_dump)
+	var yaml_dump_parsed = YAMLParser.parse(yaml_dump)
 	
 	var passed = stress_test_data == yaml_dump_parsed
 	if passed:

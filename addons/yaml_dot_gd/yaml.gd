@@ -5,8 +5,32 @@ class_name YAMLParser
 const NODE_DICT = 0
 const NODE_LIST = 1
 
-# Block scalar header tokens.
-const _BLOCK_HEADERS = ["|", ">", "|-", ">-", "|+", ">+"]
+# A block scalar header: "|" or ">", then an optional indentation indicator (1-9)
+# and an optional chomping indicator, in either order -- e.g. "|", ">-", "|2", "|2-".
+# This used to be a fixed list matched by equality, which left "|2" parsing as the
+# literal string "|2".
+static func _is_block_header(s: String) -> bool:
+	if s.is_empty() or (s[0] != "|" and s[0] != ">"):
+		return false
+	var seen_indent = false
+	var seen_chomp = false
+	for c in s.substr(1):
+		if c >= "1" and c <= "9" and not seen_indent:
+			seen_indent = true
+		elif (c == "-" or c == "+") and not seen_chomp:
+			seen_chomp = true
+		else:
+			return false
+	return true
+
+
+# The indentation indicator from a block header, or 0 if there is none. It is
+# relative to the parent node's indentation.
+static func _block_indent_hint(header: String) -> int:
+	for c in header.substr(1):
+		if c >= "1" and c <= "9":
+			return c.to_int()
+	return 0
 
 # ---------------------------------------------------------------------------
 # Line cursor: holds the split lines and a mutable index we fully control.
@@ -38,19 +62,194 @@ class _Cursor:
 
 
 # ---------------------------------------------------------------------------
-# Public entry point.
+# Flow scanner: the single copy of "am I inside a quote or a bracket right now".
+# Every top-level scan drives one of these. The state survives across feed_at()
+# calls, which is what lets a flow collection -- and a quoted scalar inside one --
+# span lines.
 # ---------------------------------------------------------------------------
-func parse(yaml_content: String) -> Variant:
-	var cur = _Cursor.new(yaml_content)
+class _Scan:
+	var stack := PackedStringArray()  # expected closers, innermost last
+	var quote := ""                   # open quote char, "" when outside a string
+
+	func depth() -> int:
+		return stack.size()
+
+	# Outside any quote. Brackets may still be open.
+	func bare() -> bool:
+		return quote.is_empty()
+
+	# Outside any quote AND any bracket.
+	func top() -> bool:
+		return quote.is_empty() and stack.is_empty()
+
+	# Consume the char at s[i]; returns how many chars it consumed (1 or 2).
+	# Index-based rather than char-at-a-time so an escape pair is swallowed whole
+	# and its second char is never re-read as an opening quote.
+	func feed_at(s: String, i: int) -> int:
+		var c = s[i]
+		var has_next = i + 1 < s.length()
+		if not quote.is_empty():
+			if quote == "'":
+				# Single quotes take no backslash escapes; only '' is special.
+				if c == "'":
+					if has_next and s[i + 1] == "'":
+						return 2
+					quote = ""
+				return 1
+			if c == "\\" and has_next:
+				return 2
+			if c == '"':
+				quote = ""
+			return 1
+		if c == '"' or c == "'":
+			quote = c
+		elif c == "[":
+			stack.append("]")
+		elif c == "{":
+			stack.append("}")
+		elif (c == "]" or c == "}") and not stack.is_empty():
+			# A closer with nothing open is ignored rather than driving the depth
+			# negative, which would disable every later top-level test on the line.
+			stack.resize(stack.size() - 1)
+		return 1
+
+	# What it would take to balance an unterminated flow: close the open quote,
+	# then the outstanding brackets innermost first.
+	func closers() -> String:
+		var out = quote
+		for k in range(stack.size() - 1, -1, -1):
+			out += stack[k]
+		return out
+
+
+# Advance `sc` over every char of `s`. No comment handling.
+static func _feed_all(sc: _Scan, s: String) -> void:
+	var i = 0
+	while i < s.length():
+		i += sc.feed_at(s, i)
+
+
+# ---------------------------------------------------------------------------
+# Public entry points.
+# ---------------------------------------------------------------------------
+
+# Parse the first (or only) document. A file with no `---` marker is one document,
+# so this keeps its original meaning.
+static func parse(yaml_content: String) -> Variant:
+	var docs = _split_documents(yaml_content)
+	if docs.is_empty():
+		return null
+	return _parse_text(docs[0])
+
+
+# Parse every `---` separated document in the text.
+static func parse_all(yaml_content: String) -> Array:
+	var out = []
+	for text in _split_documents(yaml_content):
+		out.append(_parse_text(text))
+	return out
+
+
+# Parse the first (or only) document in `path`. Returns null if it cannot be read.
+static func parse_file(path: String) -> Variant:
+	var text = _read_file(path)
+	if text == null:
+		return null
+	return parse(text)
+
+
+# Parse every document in `path`. Returns [] if it cannot be read.
+static func parse_all_file(path: String) -> Array:
+	var text = _read_file(path)
+	if text == null:
+		return []
+	return parse_all(text)
+
+
+# Dump `data` and write it to `path`. Returns false if it cannot be written.
+static func save_file(path: String, data) -> bool:
+	var f = FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		push_error("YAML: cannot write '%s': %s" % [path, error_string(FileAccess.get_open_error())])
+		return false
+	f.store_string(dump(data) + "\n")
+	f.close()
+	return true
+
+
+# Read a file whole, or push_error and return null. The parser has no error channel
+# and never throws, so an unreadable path is reported the same way a malformed
+# document is: loudly in the debugger, with a null the caller can check.
+static func _read_file(path: String) -> Variant:
+	if not FileAccess.file_exists(path):
+		push_error("YAML: file not found: '%s'" % path)
+		return null
+	var f = FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		push_error("YAML: cannot read '%s': %s" % [path, error_string(FileAccess.get_open_error())])
+		return null
+	var text = f.get_as_text()
+	f.close()
+	return text
+
+
+static func _parse_text(text: String) -> Variant:
+	var cur = _Cursor.new(text)
 	var j = cur.peek()
 	if j == -1:
 		return null
+	_warn_tabs(cur)
 	return _parse_block(cur, _get_indent_level(cur.line_at(j)))
+
+
+# Split raw text on `---` / `...` document markers.
+#
+# Safe as a pre-pass because a marker only counts in column 0, and a column-0 line
+# can never be inside a block scalar: block content is always indented deeper than
+# the key that introduced it. Chunks holding nothing but blanks and comments are
+# dropped, so a leading `---` does not produce a phantom empty document.
+static func _split_documents(text: String) -> Array:
+	var docs = []
+	var chunk = PackedStringArray()
+	for raw in text.split("\n", true):
+		var line = raw.rstrip("\r")
+		var s = line.strip_edges()
+		var marker = _get_indent_level(line) == 0 and (s == "---" or s.begins_with("--- ") \
+				or s == "..." or s.begins_with("... "))
+		if not marker:
+			chunk.append(line)
+			continue
+		docs.append("\n".join(chunk))
+		chunk = PackedStringArray()
+		# "--- foo" carries the document's root node on the marker line itself.
+		if s.begins_with("--- "):
+			chunk.append(s.substr(4).strip_edges())
+	docs.append("\n".join(chunk))
+
+	var out = []
+	for d in docs:
+		if _Cursor.new(d).peek() != -1:
+			out.append(d)
+	return out
+
+
+# YAML forbids tabs for indentation, and _get_indent_level counts spaces only, so a
+# tab-indented line reads as column 0 and the structure silently collapses. Say so
+# rather than mangle the document quietly.
+static func _warn_tabs(cur: _Cursor) -> void:
+	for i in range(cur.lines.size()):
+		var line = cur.lines[i]
+		for c in line:
+			if c == "\t":
+				push_warning("YAML: tab used for indentation on line %d; YAML requires spaces" % [i + 1])
+				return
+			if c != " ":
+				break
 
 
 # Parse all sibling nodes at exactly `indent`. Decides map vs list from the
 # first significant line at that indent.
-func _parse_block(cur: _Cursor, indent: int) -> Variant:
+static func _parse_block(cur: _Cursor, indent: int) -> Variant:
 	var j = cur.peek()
 	if j == -1:
 		return null
@@ -58,12 +257,42 @@ func _parse_block(cur: _Cursor, indent: int) -> Variant:
 	if _get_indent_level(line0) != indent:
 		return null
 	var content0 = _strip_inline_comment(line0.substr(indent))
+	# A block may itself be a flow collection. This one branch covers the document
+	# root ("[1, 2]" as the whole file), a flow on the line after a bare "key:",
+	# a flow after an empty dash, and the synthetic sub-document of a "- - [" item.
+	if content0.begins_with("[") or content0.begins_with("{"):
+		cur.i = j + 1
+		return _parse_scalar_or_quoted(cur, content0, indent)
 	if _is_list_line(content0):
 		return _parse_list(cur, indent)
+	# No key at all, so the block is not a map: it is a plain scalar, possibly
+	# spanning lines. Same discriminator _parse_list uses for its plain items.
+	var kv0 = _split_key_value(content0)
+	if kv0[1] == null and not content0.ends_with(":"):
+		cur.i = j + 1
+		return _parse_plain_scalar(cur, content0, indent)
 	return _parse_map(cur, indent)
 
 
-func _parse_map(cur: _Cursor, indent: int) -> Dictionary:
+# A block whose first line is a plain scalar. The block owns every line down to
+# the first one shallower than `indent` -- a scalar block has no siblings by
+# construction -- and YAML folds each line break in a plain scalar to one space.
+static func _parse_plain_scalar(cur: _Cursor, first: String, indent: int) -> Variant:
+	var parts = PackedStringArray([first])
+	while true:
+		var j = cur.peek()
+		if j == -1:
+			break
+		if _get_indent_level(cur.line_at(j)) < indent:
+			break
+		var content = _strip_inline_comment(cur.line_at(j).strip_edges())
+		cur.i = j + 1
+		if not content.is_empty():
+			parts.append(content)
+	return _parse_value(" ".join(parts))
+
+
+static func _parse_map(cur: _Cursor, indent: int) -> Dictionary:
 	var result = {}
 	while true:
 		var j = cur.peek()
@@ -83,16 +312,16 @@ func _parse_map(cur: _Cursor, indent: int) -> Dictionary:
 
 		if value_str == null:
 			result[key] = _parse_value_after_key(cur, indent)
-		elif value_str in _BLOCK_HEADERS:
+		elif value_str != null and _is_block_header(value_str):
 			result[key] = _consume_block_scalar(cur, value_str, indent)
 		else:
-			result[key] = _parse_scalar_or_quoted(value_str)
+			result[key] = _parse_scalar_or_quoted(cur, value_str, indent)
 	return result
 
 
 # After a "key:" with no inline value, decide between a nested block, a
 # same-indent block sequence, or a plain null.
-func _parse_value_after_key(cur: _Cursor, indent: int) -> Variant:
+static func _parse_value_after_key(cur: _Cursor, indent: int) -> Variant:
 	var nj = cur.peek()
 	if nj == -1:
 		return null
@@ -107,7 +336,7 @@ func _parse_value_after_key(cur: _Cursor, indent: int) -> Variant:
 	return null
 
 
-func _parse_list(cur: _Cursor, indent: int) -> Array:
+static func _parse_list(cur: _Cursor, indent: int) -> Array:
 	var result = []
 	while true:
 		var j = cur.peek()
@@ -146,8 +375,10 @@ func _parse_list(cur: _Cursor, indent: int) -> Array:
 
 		var kv = _split_key_value(item_text)
 		if kv[1] == null and not item_text.ends_with(":"):
-			# Plain scalar item.
-			result.append(_parse_scalar_or_quoted(item_text))
+			# Plain scalar item. "- [" also lands here: _split_key_value finds no
+			# top-level colon in it. A continuation line only has to beat the dash's
+			# own indent, so the threshold is `indent`, not `item_indent`.
+			result.append(_parse_scalar_or_quoted(cur, item_text, indent))
 		else:
 			# Map item: first pair is inline, remaining keys sit at item_indent.
 			var d = {}
@@ -160,12 +391,16 @@ func _parse_list(cur: _Cursor, indent: int) -> Array:
 					d[k] = _parse_block(cur, _get_indent_level(cur.line_at(nj)))
 				else:
 					d[k] = null
-			elif v in _BLOCK_HEADERS:
+			elif v != null and _is_block_header(v):
 				# A sibling key at item_indent must terminate the block, so the
 				# block's own content has to be deeper than item_indent - 1.
 				d[k] = _consume_block_scalar(cur, v, item_indent - 1)
 			else:
-				d[k] = _parse_scalar_or_quoted(v)
+				# Runs before _merge_item_keys, so a multi-line flow here is fully
+				# consumed and the sibling-key scan starts below it. The threshold is
+				# item_indent so a sibling key at that column is not folded into the
+				# value as if it were a continuation line.
+				d[k] = _parse_scalar_or_quoted(cur, v, item_indent)
 			_merge_item_keys(cur, d, item_indent)
 			result.append(d)
 	return result
@@ -173,7 +408,7 @@ func _parse_list(cur: _Cursor, indent: int) -> Array:
 
 # Collect additional "key: value" pairs of a list item's map (lines at exactly
 # item_indent that are not themselves list entries).
-func _merge_item_keys(cur: _Cursor, d: Dictionary, item_indent: int) -> void:
+static func _merge_item_keys(cur: _Cursor, d: Dictionary, item_indent: int) -> void:
 	while true:
 		var j = cur.peek()
 		if j == -1:
@@ -190,37 +425,45 @@ func _merge_item_keys(cur: _Cursor, d: Dictionary, item_indent: int) -> void:
 		cur.i = j + 1
 		if v == null:
 			d[k] = _parse_value_after_key(cur, item_indent)
-		elif v in _BLOCK_HEADERS:
+		elif v != null and _is_block_header(v):
 			d[k] = _consume_block_scalar(cur, v, item_indent)
 		else:
-			d[k] = _parse_scalar_or_quoted(v)
+			d[k] = _parse_scalar_or_quoted(cur, v, item_indent)
 
 
 # Handle "- - x" by reconstructing a sub-document at item_indent: the remainder
 # of the dash line (re-padded) plus the following lines that belong to it.
-func _parse_nested_dash_list(cur: _Cursor, header_idx: int, item_indent: int, parent_indent: int) -> Variant:
+static func _parse_nested_dash_list(cur: _Cursor, header_idx: int, item_indent: int, parent_indent: int) -> Variant:
 	var raw0 = cur.line_at(header_idx)
 	var stripped = raw0.substr(parent_indent).lstrip(" ")
 	var after = stripped.substr(1).lstrip(" ")  # text after the first dash
 	var synth = PackedStringArray()
 	synth.append(" ".repeat(item_indent) + after)
+	# Track brackets while collecting, because a flow opened inside this item owns
+	# its continuation lines no matter how they are indented -- a closing bracket
+	# is legal in column 0. Breaking on indent there would truncate the flow and
+	# leave the stray "]" to be parsed as a key by the caller.
+	var sc = _Scan.new()
+	_feed_line(sc, after)
 	while cur.i < cur.lines.size():
 		var r = cur.line_at(cur.i)
 		if r.strip_edges() == "":
 			synth.append("")
 			cur.i += 1
 			continue
-		if _get_indent_level(r) < item_indent:
+		if sc.depth() == 0 and _get_indent_level(r) < item_indent:
 			break
 		synth.append(r)
 		cur.i += 1
+		# Feed a comment-cut copy; a bracket inside a comment is not a real one.
+		_feed_line(sc, r.strip_edges())
 	var sub = _Cursor.new("\n".join(synth))
 	return _parse_block(sub, item_indent)
 
 
 # Consume a block scalar (| or >) by lookahead. The block ends at the first
 # non-blank line whose indent is less than the block's established indent.
-func _consume_block_scalar(cur: _Cursor, header: String, parent_indent: int) -> String:
+static func _consume_block_scalar(cur: _Cursor, header: String, parent_indent: int) -> String:
 	var style = ML_LITERAL if header.begins_with("|") else ML_FOLDED
 	var chomping = "clip"
 	if header.ends_with("-"):
@@ -229,7 +472,10 @@ func _consume_block_scalar(cur: _Cursor, header: String, parent_indent: int) -> 
 		chomping = "keep"
 
 	var collected = []
-	var block_indent = -1
+	# An explicit indentation indicator ("|2") fixes the content column relative to
+	# the parent, instead of inferring it from the first line.
+	var hint = _block_indent_hint(header)
+	var block_indent = parent_indent + hint if hint > 0 else -1
 	while cur.i < cur.lines.size():
 		var raw = cur.line_at(cur.i)
 		if raw.strip_edges() == "":
@@ -255,7 +501,7 @@ const ML_FOLDED = 2
 
 
 # Process collected block-scalar lines according to style and chomping.
-func _process_multiline_content(content: Array, style: int, chomping: String) -> String:
+static func _process_multiline_content(content: Array, style: int, chomping: String) -> String:
 	var lines = content.duplicate()
 
 	# Folding: join consecutive non-empty lines with a single space.
@@ -282,7 +528,11 @@ func _process_multiline_content(content: Array, style: int, chomping: String) ->
 		"strip":
 			full_content = full_content.rstrip("\n")
 		"clip":
-			full_content = full_content.rstrip("\n") + "\n"
+			# Clip keeps a single trailing newline -- but an empty block has no
+			# content to terminate, so it stays empty rather than becoming "\n".
+			full_content = full_content.rstrip("\n")
+			if not full_content.is_empty():
+				full_content += "\n"
 		"keep":
 			pass
 	return full_content
@@ -292,20 +542,108 @@ func _process_multiline_content(content: Array, style: int, chomping: String) ->
 # Scalar / value helpers.
 # ---------------------------------------------------------------------------
 
-# Parse a value that may be a plain scalar, quoted string, or inline flow.
-static func _parse_scalar_or_quoted(s: String) -> Variant:
-	return _parse_value(s)
+# Parse a value that may be a plain scalar, quoted string, or a flow collection.
+# Advances the cursor past the continuation lines of a multi-line flow, and of a
+# plain scalar that runs on past its key line. `indent` is the indent of the line
+# the value came from: continuation lines must be deeper than it.
+static func _parse_scalar_or_quoted(cur: _Cursor, s: String, indent: int) -> Variant:
+	return _parse_value(_continue_plain_scalar(cur, _complete_flow(cur, s), indent))
+
+
+# A plain scalar value may run on across the following, more-indented lines, each
+# break folding to a single space. Only a PLAIN scalar does: a flow collection has
+# already been closed by _complete_flow, and a quoted scalar spanning lines is not
+# supported outside one, so anything opening with a bracket or a quote is left as is.
+#
+# This is unambiguous rather than a guess -- in valid YAML a deeper line following
+# an INLINE value can only be a continuation of it. A block scalar is dispatched
+# before we get here, a flow is already consumed, and peek() skips comment lines.
+static func _continue_plain_scalar(cur: _Cursor, text: String, indent: int) -> String:
+	if text.is_empty() or text[0] in ["[", "{", '"', "'"]:
+		return text
+	var parts = PackedStringArray([text])
+	while true:
+		var j = cur.peek()
+		if j == -1:
+			break
+		if _get_indent_level(cur.line_at(j)) <= indent:
+			break
+		var content = _strip_inline_comment(cur.line_at(j).strip_edges())
+		cur.i = j + 1
+		if not content.is_empty():
+			parts.append(content)
+	if parts.size() == 1:
+		return text
+	return " ".join(parts)
+
+
+# If `first` opens a flow collection that it does not close, pull the following
+# lines off the cursor until the brackets balance and return the whole thing as
+# one logical line. Otherwise return `first` untouched.
+#
+# Raw lines rather than peek(): blank lines and full-line comments are legal
+# inside a flow, and a closing bracket may legally sit in column 0 -- a
+# multi-line flow simply cannot be bounded by indentation.
+static func _complete_flow(cur: _Cursor, first: String) -> String:
+	# Only a value that _parse_value would itself treat as a flow may consume
+	# lines. Without this gate a plain scalar holding a stray bracket ("todo [wip")
+	# would open a depth and swallow the rest of the document.
+	if not (first.begins_with("[") or first.begins_with("{")):
+		return first
+
+	var sc = _Scan.new()
+	_feed_all(sc, first)
+	if sc.depth() == 0:
+		return first  # closes on its own line: the existing path, byte for byte
+
+	# The flow stays open, so from here comments are cut on quote state alone.
+	# Rescan the first line under that rule: the caller stripped it with the
+	# depth-gated rule, which leaves a comment after an opening bracket in place.
+	sc = _Scan.new()
+	var parts = PackedStringArray([_consume_line(sc, first)])
+	while sc.depth() > 0 and cur.i < cur.lines.size():
+		var piece = _consume_line(sc, cur.line_at(cur.i).strip_edges())
+		cur.i += 1
+		if not piece.is_empty():
+			parts.append(piece)
+
+	if sc.depth() > 0:
+		push_warning("YAML: unterminated flow collection, auto-closed with '%s'" % sc.closers())
+		parts.append(sc.closers())
+
+	# A single space, because a plain or quoted scalar may itself span lines and
+	# YAML folds that break to one space. Between structural tokens the space is
+	# discarded by the strip_edges() in _split_top_level.
+	return " ".join(parts)
 
 
 # Convert a string token to the appropriate Godot type.
 static func _parse_value(s: String) -> Variant:
 	s = s.strip_edges()
 	if s.is_empty(): return null
-	if s == "null" or s == "~": return null
-	if s == "true": return true
-	if s == "false": return false
+
+	# YAML 1.2 core schema accepts any case for these. `yes`/`no`/`on`/`off` are
+	# deliberately NOT booleans -- that is YAML 1.1 -- and _scalar() already quotes
+	# them on the way out, so leaving them as strings keeps the round-trip honest.
+	var lower = s.to_lower()
+	if lower == "null" or s == "~": return null
+	if lower == "true": return true
+	if lower == "false": return false
+
 	if s.is_valid_int(): return s.to_int()
 	if s.is_valid_float(): return s.to_float()
+
+	if lower == ".inf" or lower == "+.inf": return INF
+	if lower == "-.inf": return -INF
+	if lower == ".nan": return NAN
+	if s.is_valid_hex_number(true): return s.hex_to_int()
+
+	# Digit grouping: 1_000_000. Only if what is left is actually a number, so an
+	# ordinary word like snake_case falls through to the string branch below.
+	if s.contains("_"):
+		var bare = s.replace("_", "")
+		if bare.is_valid_int(): return bare.to_int()
+		if bare.is_valid_float(): return bare.to_float()
 
 	# Inline flow sequence.
 	if s.begins_with("[") and s.ends_with("]"):
@@ -391,62 +729,71 @@ static func _unquote_key(k: String) -> String:
 # Split "key: value" on the first top-level ": " (or trailing ":").
 # Returns [key, value_or_null].
 static func _split_key_value(line: String) -> Array:
-	var depth = 0
-	var quote = ""
+	var sc = _Scan.new()
 	var i = 0
 	while i < line.length():
-		var c = line[i]
-		if not quote.is_empty():
-			if c == quote:
-				quote = ""
-			i += 1
-			continue
-		if c == '"' or c == "'":
-			quote = c
-			i += 1
-			continue
-		if c == "[" or c == "{":
-			depth += 1
-		elif c == "]" or c == "}":
-			depth -= 1
-		elif depth == 0 and c == ":" and (i + 1 >= line.length() or line[i + 1] == " "):
+		if sc.top() and line[i] == ":" and (i + 1 >= line.length() or line[i + 1] == " "):
 			var v = line.substr(i + 1).strip_edges()
 			return [line.substr(0, i).strip_edges(), null if v.is_empty() else v]
-		i += 1
+		i += sc.feed_at(line, i)
 	if line.strip_edges().ends_with(":"):
 		var key = line.strip_edges()
 		return [key.substr(0, key.length() - 1).strip_edges(), null]
 	return [line.strip_edges(), null]
 
 
-# True if a line (already indent-stripped) starts a list entry.
+# True if a line (already indent-stripped) starts a list entry: a dash that is
+# either alone or followed by a space. "- - x" matches on the space, so there is
+# no need to accept a second dash -- and accepting one is what used to make the
+# document marker "---" look like a list entry and destroy the document.
 static func _is_list_line(content: String) -> bool:
 	var s = content.lstrip(" ")
 	if not s.begins_with("-"):
 		return false
-	return s.length() == 1 or s[1] == " " or s[1] == "-"
+	return s.length() == 1 or s[1] == " "
 
 
 # Remove a trailing " #..." comment at top level (outside quotes/brackets).
 static func _strip_inline_comment(content: String) -> String:
-	var depth = 0
-	var quote = ""
-	for i in range(content.length()):
-		var c = content[i]
-		if not quote.is_empty():
-			if c == quote:
-				quote = ""
-			continue
-		if c == '"' or c == "'":
-			quote = c
-			continue
-		if c == "[" or c == "{":
-			depth += 1
-		elif c == "]" or c == "}":
-			depth -= 1
-		elif depth == 0 and c == "#" and i > 0 and content[i - 1] == " ":
+	var sc = _Scan.new()
+	var i = 0
+	while i < content.length():
+		if sc.top() and content[i] == "#" and i > 0 and content[i - 1] == " ":
 			return content.substr(0, i).strip_edges()
+		i += sc.feed_at(content, i)
 	return content
+
+
+# Cut a comment from one line of an OPEN flow collection, advancing `sc` as it
+# goes so quote and bracket state carry into the next line.
+#
+# The comment rule here is deliberately depth-agnostic, unlike the depth-gated
+# _strip_inline_comment above: a continuation line's own bracket depth is
+# meaningless, since it is relative to a flow that opened on an earlier line.
+# It also cuts a comment that is the whole line (i == 0), which the trailing-
+# comment rule above would miss.
+static func _consume_line(sc: _Scan, line: String) -> String:
+	var i = 0
+	while i < line.length():
+		if sc.bare() and line[i] == "#" and (i == 0 or line[i - 1] == " " or line[i - 1] == "\t"):
+			return line.substr(0, i).strip_edges()
+		i += sc.feed_at(line, i)
+	return line
+
+
+# Advance `sc` over one source line, cutting its comment first. Which comment
+# rule applies depends on whether a flow is already open (see _consume_line).
+static func _feed_line(sc: _Scan, line: String) -> String:
+	if sc.depth() > 0:
+		return _consume_line(sc, line)
+	# A whole-line comment is fed nothing at all. _strip_inline_comment only cuts a
+	# `#` at i > 0, so without this a bracket inside such a comment would open a
+	# depth that never closes.
+	if sc.bare() and line.lstrip(" \t").begins_with("#"):
+		return ""
+	var cut = _strip_inline_comment(line)
+	_feed_all(sc, cut)
+	return cut
 
 
 # Count leading spaces (YAML indentation is spaces only).
@@ -462,58 +809,31 @@ static func _get_indent_level(line: String) -> int:
 
 # Find a delimiter char at bracket-depth 0 outside quotes; -1 if none.
 static func _find_top_level(s: String, delim: String) -> int:
-	var depth = 0
-	var quote = ""
-	for i in range(s.length()):
-		var c = s[i]
-		if not quote.is_empty():
-			if c == quote:
-				quote = ""
-			continue
-		if c == '"' or c == "'":
-			quote = c
-			continue
-		if c == "[" or c == "{":
-			depth += 1
-		elif c == "]" or c == "}":
-			depth -= 1
-		elif depth == 0 and c == delim:
+	var sc = _Scan.new()
+	var i = 0
+	while i < s.length():
+		if sc.top() and s[i] == delim:
 			return i
+		i += sc.feed_at(s, i)
 	return -1
 
 
 # Split a string on a single-char delimiter at bracket-depth 0 outside quotes.
 static func _split_top_level(s: String, delim: String) -> Array:
+	# Slice on the delimiter positions rather than accumulating char by char, so
+	# an escape pair is copied through intact.
 	var parts = []
-	var buf = ""
-	var depth = 0
-	var quote = ""
+	var sc = _Scan.new()
+	var start = 0
 	var i = 0
 	while i < s.length():
-		var c = s[i]
-		if not quote.is_empty():
-			buf += c
-			if c == quote:
-				quote = ""
+		if sc.top() and s[i] == delim:
+			parts.append(s.substr(start, i - start).strip_edges())
 			i += 1
+			start = i
 			continue
-		if c == '"' or c == "'":
-			quote = c
-			buf += c
-			i += 1
-			continue
-		if c == "[" or c == "{":
-			depth += 1
-		elif c == "]" or c == "}":
-			depth -= 1
-		if depth == 0 and c == delim:
-			parts.append(buf.strip_edges())
-			buf = ""
-			i += 1
-			continue
-		buf += c
-		i += 1
-	parts.append(buf.strip_edges())
+		i += sc.feed_at(s, i)
+	parts.append(s.substr(start).strip_edges())
 	return parts
 
 
@@ -521,8 +841,13 @@ static func _split_top_level(s: String, delim: String) -> Array:
 # Dump
 # ---------------------------------------------------------------------------
 static func dump(data, indent: int = 0) -> String:
-	if (data is Dictionary or data is Array) and data.is_empty():
-		return "{}" if data is Dictionary else "[]"
+	if data is Dictionary or data is Array:
+		if data.is_empty():
+			return "{}" if data is Dictionary else "[]"
+	else:
+		# A scalar document. Only reachable at the top level: the recursion below
+		# renders scalar leaves with _scalar() and never calls back into dump().
+		return _scalar(data)
 
 	var lines = []
 	var pad = "  ".repeat(indent)
@@ -558,7 +883,14 @@ static func _scalar(val) -> String:
 		return "null"
 	if val is bool:
 		return "true" if val else "false"
-	if val is int or val is float:
+	if val is float:
+		# str() renders these as "inf" / "nan", which do not read back as floats.
+		if is_inf(val):
+			return ".inf" if val > 0 else "-.inf"
+		if is_nan(val):
+			return ".nan"
+		return str(val)
+	if val is int:
 		return str(val)
 
 	var s = str(val)
@@ -583,6 +915,12 @@ static func _scalar(val) -> String:
 				break
 
 	if s.begins_with(" ") or s.ends_with(" "):
+		needs_quotes = true
+
+	# The round-trip invariant: quote any string that would NOT read back as this
+	# same string. Catches every scalar form the parser types -- .inf, .nan, hex,
+	# digit-grouped ints -- without having to enumerate them here as they are added.
+	if not needs_quotes and not (_parse_value(s) is String):
 		needs_quotes = true
 
 	if needs_quotes:

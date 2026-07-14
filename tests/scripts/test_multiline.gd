@@ -1,7 +1,6 @@
 
 # Test multiline YAML parsing
 static func run() -> bool:
-	var parser = YAMLParser.new()
 	var test_count = 0
 	var success_count = 0
 	var f_tmp
@@ -17,7 +16,7 @@ static func run() -> bool:
 		"script": "function hello() {\n  print(\"Hello World!\");\n  print(\"Hello World!\");\n}\n"
 	}
 	test_count += 1
-	var result1 = parser.parse(yaml1)
+	var result1 = YAMLParser.parse(yaml1)
 	if result1 == expected1:
 		success_count += 1
 		print("Test 1: PASSED - Literal block")
@@ -37,7 +36,7 @@ static func run() -> bool:
 		"description": "This is a long description that will be folded into a single paragraph.\n"
 	}
 	test_count += 1
-	var result2 = parser.parse(yaml2)
+	var result2 = YAMLParser.parse(yaml2)
 	if result2 == expected2:
 		success_count += 1
 		print("Test 2: PASSED - Folded block")
@@ -57,7 +56,7 @@ static func run() -> bool:
 		"content": "No trailing newline"
 	}
 	test_count += 1
-	var result3 = parser.parse(yaml3)
+	var result3 = YAMLParser.parse(yaml3)
 	if result3 == expected3:
 		success_count += 1
 		print("Test 3: PASSED - Strip chomping")
@@ -77,7 +76,7 @@ static func run() -> bool:
 		"content": "line 1\nline 2\n\n\n\n"
 	}
 	test_count += 1
-	var result4 = parser.parse(yaml4)
+	var result4 = YAMLParser.parse(yaml4)
 	if result4 == expected4:
 		success_count += 1
 		print("Test 4: PASSED - Keep chomping")
@@ -97,7 +96,7 @@ static func run() -> bool:
 		"message": "Line 1\nLine 2\tIndented"
 	}
 	test_count += 1
-	var result5 = parser.parse(yaml5)
+	var result5 = YAMLParser.parse(yaml5)
 	if result5 == expected5:
 		success_count += 1
 		print("Test 5: PASSED - Quoted string")

@@ -3,8 +3,30 @@ This fork is modified with a different parsing function and dump to string funct
 
 Changes sent upstream if accepted.
 
+Supported beyond the original:
+ - **Multiline JSON flow.** `[` / `{` may stay open across lines, with comments and blank lines
+   inside, and the closing bracket may sit at any indent (including column 0).
+ - **Document markers.** `---` and `...`, with `parse_all()` for multi-document files.
+ - **Plain scalars.** A value may run on across more-indented lines, and a block (or a whole
+   document) may be a bare scalar. Each line break folds to a single space.
+ - **Scalar types.** Any case of `true`/`false`/`null`, plus `.inf`, `.nan`, hex (`0x1F`) and
+   digit grouping (`1_000`). `yes`/`no`/`on`/`off` stay strings, per the YAML 1.2 core schema.
+ - **Block scalar indentation indicators**, e.g. `|2`.
+ - **A static API**, including file helpers. Nothing needs to be instantiated.
+
+`dump()` quotes any string that would not read back as that same string, so `parse(dump(x)) == x`.
+
 Known Limitations:
- - Multiline JSON flow not supported
+ - No anchors, aliases or merge keys (`&a`, `*a`, `<<:`); they pass through as literal strings.
+ - An unterminated flow collection consumes the rest of its document and is then closed
+   implicitly, with a warning. It cannot be bounded by indentation, because a legal closing
+   bracket may be less indented than the key that opened it.
+ - Tabs used for indentation are reported with a warning, not corrected. YAML forbids them.
+ - A blank line inside a multiline quoted scalar folds to a single space rather than a newline.
+ - A trailing comma in a flow collection yields a trailing null element (`[1, 2, ]` -> `[1, 2, null]`),
+   matching the strictness of the YAML and JSON specs, which both reject it outright.
+ - A flow mapping's keys are typed, so `{1: a}` has an **int** key, but `dump` writes `1: a`, which
+   reads back as the **string** `"1"`. Non-string keys in flow mappings do not round-trip.
 
 Original README
 ---
@@ -50,17 +72,20 @@ Make sure "tabs to spaces" is enabled.
 ## Basic usage:
 
 ```gdscript
-var parser = YAMLParser.new()
-
-var yfile = FileAccess.open(
-                "res://assets/yaml_dot_gd/tests/yamls/basic/test_01.yaml",
-                FileAccess.READ)
-var yaml = yfile.get_as_text()
-yfile.close()
-
-var result = parser.parse(yaml)
+var result = YAMLParser.parse_file("res://assets/yaml_dot_gd/tests/yamls/basic/test_01.yaml")
 if typeof(result) == TYPE_DICTIONARY and result.has("name"):
     print(result["name"])
+```
+
+The whole API is static -- there is nothing to instantiate:
+
+```gdscript
+YAMLParser.parse(text)            # first (or only) document
+YAMLParser.parse_all(text)        # every `---` separated document, as an Array
+YAMLParser.parse_file(path)       # null + push_error if the file cannot be read
+YAMLParser.parse_all_file(path)
+YAMLParser.dump(data)             # -> String
+YAMLParser.save_file(path, data)  # dump and write; false + push_error on failure
 ```
 
 ## Test Results
